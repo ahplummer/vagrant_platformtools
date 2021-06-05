@@ -1,0 +1,65 @@
+---
+- name: Installing Zsh and git
+  apt: pkg=zsh,git state=latest
+  register: installation
+  become: true
+
+- name: Check if .zshrc exists
+  stat:
+    path: /home/vagrant/.zshrc
+  register: stat_rc_result
+
+- name: Check if .oh-my-zsh exists
+  stat:
+    path: /home/vagrant/.oh-my-zsh
+  register: stat_oh_my_zsh_result
+
+- name: Cloning  oh-my-zsh
+  git:
+    repo=https://github.com/robbyrussell/oh-my-zsh
+    dest=/home/vagrant/.oh-my-zsh
+  when: not stat_oh_my_zsh_result.stat.exists
+
+- name: Creating new /home/vagrant/.zshrc
+  copy:
+    src: /home/vagrant/.oh-my-zsh/templates/zshrc.zsh-template
+    dest: /home/vagrant/.zshrc
+    remote_src: yes
+    owner: vagrant
+    group: vagrant
+    mode: '0644'
+  when: not stat_rc_result.stat.exists
+
+# Make ZSH the default shell for vagrant user, unless already.
+- name: zsh facts
+  shell:  "awk -F: -v user=vagrant '$1 == user {print $NF}' /etc/passwd"
+  register: default_shell
+  changed_when: False
+
+- name: make zsh default
+  shell: chsh --shell /bin/zsh vagrant
+  when: default_shell.stdout.find('/bin/zsh') == -1
+
+# Install fabulous Powerlevel10k
+- name: Git Powerline 10k
+  ansible.builtin.git:
+    repo: 'https://github.com/romkatv/powerlevel10k.git'
+    #dest: /home/vagrant/powerlevel10k
+    dest: /home/vagrant/.oh-my-zsh/themes/powerlevel10k
+    depth: 1
+
+- name: copy p10 config
+  ansible.builtin.copy:
+    src: ./.p10k.zsh
+    dest: /home/vagrant/.p10k.zsh
+    owner: vagrant
+    group: vagrant
+    mode: '0644'
+
+- name: copy/overwrite .zshrc
+  ansible.builtin.copy:
+    src: ./.zshrc
+    dest: /home/vagrant/.zshrc
+    owner: vagrant
+    group: vagrant
+    mode: '0644'

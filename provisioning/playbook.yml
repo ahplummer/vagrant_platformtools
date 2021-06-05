@@ -1,0 +1,171 @@
+---
+- hosts: all
+  become: yes
+  roles:
+    - ohmysh
+
+  tasks: 
+  - name: Install packages
+    apt:
+      name:
+      - apt-transport-https
+      - debconf-utils
+      - gnupg2
+      - python3-pip
+      - groff
+      - git
+      - libpq-dev
+      - python-dev
+      - libssl-dev
+      - build-essential
+      - libffi-dev
+      - wget
+      - curl
+      - unzip
+      - jq
+      - ca-certificates
+      - lsb-release
+      - gnupg
+      - golang-go
+      - tmux
+      - zsh
+      - vim
+      - nano
+      - ansible
+      - postgresql-client
+      - mysql-client
+      - python-setuptools
+      state: latest
+      cache_valid_time: 3600    # update cache if more than an hour old
+
+  - name: Add Docker GPG apt Key
+    apt_key:
+      url: https://download.docker.com/linux/ubuntu/gpg
+      state: present
+
+  - name: Add Docker Repository
+    apt_repository:
+      repo: deb https://download.docker.com/linux/ubuntu bionic stable
+      state: present
+
+  - name: Update apt and install docker-ce docker-python
+    apt: 
+      update_cache: yes 
+      name: 
+        - docker-ce 
+        - python3-docker
+      state: latest
+
+  # - name: Install Docker Module for Python
+  #   pip:
+  #     name: docker
+
+  - name: Pull default Docker image
+    docker_image:
+      name: "ahplummer/og_platform_eng"
+      source: pull
+
+  - name: copy/overwrite platformtools.sh
+    ansible.builtin.copy:
+      src: ./platformtools.sh
+      dest: /home/vagrant/platformtools.sh
+      owner: vagrant
+      group: vagrant
+      mode: '0777'
+  
+  - name: Ensure group "docker" exists
+    ansible.builtin.group:
+      name: docker
+      state: present
+ 
+  - name: Add the vagrant user to the docker group
+    ansible.builtin.user:
+      name: vagrant
+      shell: /bin/zsh
+      groups: docker
+      append: yes
+     
+  - name: Install cffi 
+    pip:
+      name: cffi
+
+  - name: Install cryptography
+    pip:
+      name: cryptography
+
+  - name: Install awscli
+    pip:
+      name: awscli
+
+  - name: Install virtualenv
+    pip:
+      name: virtualenv
+
+  - name: Download Terraform
+    get_url:
+      url: https://releases.hashicorp.com/terraform/0.15.3/terraform_0.15.3_linux_amd64.zip
+      dest: /home/vagrant/terraform.zip
+      mode: '0440'
+
+  - name: Unzip & Move Terraform
+    ansible.builtin.unarchive: 
+      src: /home/vagrant/terraform.zip 
+      dest: /usr/local/bin
+      remote_src: yes
+
+#   RUN wget https://releases.hashicorp.com/vault/1.7.2/vault_1.7.2_linux_amd64.zip \
+# 	&& unzip vault_1.7.2_linux_amd64.zip	
+# RUN mv vault /usr/bin/vault
+
+  - name: Download Vault
+    get_url:
+      url: https://releases.hashicorp.com/vault/1.7.2/vault_1.7.2_linux_amd64.zip
+      dest: /home/vagrant/vault.zip
+      mode: '0440'
+    
+  - name: Unzip & Move Vault
+    ansible.builtin.unarchive:
+      src: /home/vagrant/vault.zip
+      dest: /usr/local/bin
+      remote_src: yes
+    
+  - name: Check if Azure CLI is installed
+    command: az --version
+    register: azoutput
+    changed_when: no #prevents changed message
+    ignore_errors: yes
+
+  - name: Download Azure CLI
+    get_url:
+      url: https://aka.ms/InstallAzureCLIDeb
+      dest: /home/vagrant/azurecli_install.sh
+      mode: a+x
+    when: azoutput.rc > 0
+
+  - name: Executing Azure CLI
+    command: bash /home/vagrant/azurecli_install.sh
+    when: azoutput.rc > 0
+
+  - name: Check if GCloud CLI is installed
+    command: bash /home/vagrant/google-cloud-sdk/bin/gcloud version
+    register: gcloud_output
+    changed_when: no 
+    ignore_errors: yes
+
+  - name: Download GCloud 
+    get_url:
+      url: https://dl.google.com/dl/cloudsdk/channels/rapid/downloads/google-cloud-sdk-343.0.0-linux-x86_64.tar.gz
+      dest: /home/vagrant/gcloud.tar.gz
+      mode: '0440'
+    when: gcloud_output.rc > 0
+
+  - name: Unzip GCloud
+    ansible.builtin.unarchive:
+      src: /home/vagrant/gcloud.tar.gz
+      dest: /home/vagrant
+      remote_src: yes
+    when: gcloud_output.rc > 0
+
+  - name: Executing GCloud installer
+    command: bash /home/vagrant/google-cloud-sdk/install.sh --quiet --path-update true --rc-path /home/vagrant/.bashrc
+    when: gcloud_output.rc > 0
