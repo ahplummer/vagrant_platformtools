@@ -5,6 +5,13 @@
     - ohmysh
 
   tasks: 
+  - name: "Update cache & Full system update"
+    apt:
+      update_cache: true
+      upgrade: dist
+      cache_valid_time: 3600
+      force_apt_get: true
+
   - name: Install packages
     apt:
       name:
@@ -35,8 +42,59 @@
       - postgresql-client
       - mysql-client
       - python-setuptools
+      - openconnect
+      - python3-gi 
+      - gir1.2-gtk-3.0 
+      - gir1.2-webkit2-4.0
+      - python3.9-venv
+      - dkms 
+      - linux-headers-generic 
+      - linux-headers-5.15.8-76051508-generic
+
       state: latest
       cache_valid_time: 3600    # update cache if more than an hour old
+
+  - name: Check if gp-saml-gui is installed
+    command: bash gp-saml-gui
+    register: gp_output
+    changed_when: no 
+    ignore_errors: yes
+
+  - name: Download GP-SAML-GUI
+    get_url:
+      url: https://github.com/dlenski/gp-saml-gui/archive/master.zip
+      dest: /home/vagrant/gp-saml-gui.zip
+      mode: '0440'
+    when: gp_output.rc > 0
+
+  - name: copy/overwrite login.sh
+    ansible.builtin.copy:
+      src: ./login.sh
+      dest: /home/vagrant/login.sh
+      owner: vagrant
+      group: vagrant
+      mode: '0777'    
+
+  - name: Install GP things
+    command: pip3 install /home/vagrant/gp-saml-gui.zip
+    when: gp_output.rc > 0
+
+  - name: Delete Resolvconf
+    file:
+      state: absent
+      path: /etc/resolv.conf
+    when: gp_output.rc > 0
+
+  - name: Create symbolic link for Resolvconf
+    file:
+      src: "/run/resolvconf/resolv.conf"
+      dest: "/etc/resolv.conf"
+      state: link
+    when: gp_output.rc > 0
+
+  - name: Fix up ResolvConf things
+    command: resolvconf -u
+    when: gp_output.rc > 0
 
   - name: Add Docker GPG apt Key
     apt_key:
@@ -103,7 +161,7 @@
 
   - name: Download Terraform
     get_url:
-      url: https://releases.hashicorp.com/terraform/0.15.3/terraform_0.15.3_linux_amd64.zip
+      url: https://releases.hashicorp.com/terraform/1.1.2/terraform_1.1.2_linux_amd64.zip
       dest: /home/vagrant/terraform.zip
       mode: '0440'
 
@@ -112,10 +170,6 @@
       src: /home/vagrant/terraform.zip 
       dest: /usr/local/bin
       remote_src: yes
-
-#   RUN wget https://releases.hashicorp.com/vault/1.7.2/vault_1.7.2_linux_amd64.zip \
-# 	&& unzip vault_1.7.2_linux_amd64.zip	
-# RUN mv vault /usr/bin/vault
 
   - name: Download Vault
     get_url:
@@ -144,6 +198,8 @@
 
   - name: Executing Azure CLI
     command: bash /home/vagrant/azurecli_install.sh
+    environment:
+        DIST_CODE: hirsute
     when: azoutput.rc > 0
 
   - name: Check if GCloud CLI is installed
@@ -167,5 +223,5 @@
     when: gcloud_output.rc > 0
 
   - name: Executing GCloud installer
-    command: bash /home/vagrant/google-cloud-sdk/install.sh --quiet --path-update true --rc-path /home/vagrant/.bashrc
+    command: bash /home/vagrant/google-cloud-sdk/install.sh --quiet --path-update true --rc-path /home/vagrant/.zshrc
     when: gcloud_output.rc > 0
